@@ -1,0 +1,21 @@
+My Quiz Title from File
+This is the introductory text.
+It can span multiple lines.
+
+1. What is 2 + 2?
+A) 3
+B) 4
+C) 5
+D) 6
+Answer: B
+
+2. Which content type is this?
+A. XML
+B. JSON
+C. TXT
+Answer: C
+
+3. Is it working?
+A) Yes
+B) No
+Correct: A

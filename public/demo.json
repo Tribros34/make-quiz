@@ -1,0 +1,51 @@
+{
+    "title": "General Knowledge & Tarih",
+    "content": "<h1>Quiz Introduction</h1><p>Welcome to this <strong>demo quiz</strong>. It tests your knowledge of general facts and Turkish history.</p><ul><li>3 Questions</li><li>Multiple Choice</li></ul>",
+    "questions": [
+        {
+            "id": "q1",
+            "number": 1,
+            "text": "What is the capital of Turkey?",
+            "options": [
+                "Istanbul",
+                "Ankara",
+                "Izmir",
+                "Bursa"
+            ],
+            "correctAnswer": 1,
+            "explanation": "Ankara became the capital in 1923."
+        },
+        {
+            "id": "q2",
+            "number": 2,
+            "text": "Which planet is known as the Red Planet?",
+            "options": [
+                "Venus",
+                "Mars",
+                "Jupiter",
+                "Saturn"
+            ],
+            "correctAnswer": 1,
+            "explanation": "Mars appears red due to iron oxide."
+        },
+        {
+            "id": "q3",
+            "number": 3,
+            "text": "Türkiye Cumhuriyeti hangi yılda kuruldu?",
+            "options": [
+                "1919",
+                "1920",
+                "1923",
+                "1938"
+            ],
+            "correctAnswer": 2,
+            "explanation": "29 Ekim 1923'te ilan edildi."
+        }
+    ],
+    "settings": {
+        "showAnswers": true,
+        "coverPage": true,
+        "fontSize": "medium",
+        "includeAnswerKey": true
+    }
+}
