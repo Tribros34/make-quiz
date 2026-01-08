@@ -27,6 +27,9 @@ const greatVibes = Great_Vibes({
 export const metadata: Metadata = {
   title: "Makexam - Create PDF Quizzes & Exams",
   description: "Easily create, customize, and export quizzes and exams to PDF format.",
+  icons: {
+    icon: '/icon.png',
+  },
 };
 
 export default function RootLayout({
