@@ -25,7 +25,7 @@ interface QuestionBuilderProps {
     onClear: () => void;
 }
 
-export function QuestionBuilder({ sections, onChange, onClear }: QuestionBuilderProps) {
+export function QuestionBuilder({ sections = [], onChange, onClear }: QuestionBuilderProps) {
     const sensors = useSensors(
         useSensor(PointerSensor),
         useSensor(KeyboardSensor, {

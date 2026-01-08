@@ -82,7 +82,12 @@ export default function QuizMaker() {
                     };
                 }
 
-                setState(parsed);
+                // Ensure sections exists
+                if (!parsed.sections) {
+                    parsed.sections = [];
+                }
+
+                setState({ ...INITIAL_STATE, ...parsed });
             } catch (e) {
                 console.error('Failed to load state', e);
             }
