@@ -88,7 +88,11 @@ export function parseTxtToQuiz(text: string): Partial<QuizState> {
 
     return {
         content: documentContent.join(''),
-        questions: questions,
+        sections: [{
+            id: uuidv4(),
+            title: 'Imported',
+            questions: questions
+        }]
     };
 }
 

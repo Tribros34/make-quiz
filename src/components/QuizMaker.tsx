@@ -11,20 +11,33 @@ import { Card } from '@/components/ui/Card';
 import { pdf } from '@react-pdf/renderer';
 import { PDFDocument } from '@/components/pdf/PDFDocument';
 import { parseTxtToQuiz } from '@/lib/txtParser';
-import { Save, Download, FilePlus, Settings, Printer, FileText, Smartphone, Upload, Plus } from 'lucide-react';
+import { ExportProgress, ExportStep } from '@/components/pdf/ExportProgress';
+import { normalizeQuizContent, paginateQuestions } from '@/components/pdf/utils/pdfHelpers';
+import { TemplatePicker } from '@/components/templates/TemplatePicker';
+import { QuizTemplate } from '@/templates/quizTemplates';
+import { Save, Download, FilePlus, Settings, Printer, FileText, Smartphone, Upload, Plus, LayoutTemplate } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { v4 as uuidv4 } from 'uuid';
+import { SettingsPanel } from '@/components/settings/SettingsPanel';
+import { DEFAULT_PRESET_ID, getPreset } from '@/lib/pdfPresets'; // Added getPreset
+import { QuizPreview } from '@/components/preview/QuizPreview';
 // import { generatePDF } from '@/lib/pdfGenerator'; // To be implemented
 
 const INITIAL_STATE: QuizState = {
     title: '',
     content: '<p>Start typing your content here...</p>',
-    questions: [],
+    sections: [],
     settings: {
+        selectedPresetId: DEFAULT_PRESET_ID,
         showAnswers: true,
         coverPage: true,
-        fontSize: 'medium',
         includeAnswerKey: true,
+        numberingStyle: 'continuous',
+        showQuestionNumbers: true,
+        showSectionTitles: true,
+        answerDisplayMode: 'end_of_pdf',
+        description: '',
     },
 };
 
@@ -33,7 +46,18 @@ export default function QuizMaker() {
     const [state, setState] = useState<QuizState>(INITIAL_STATE);
     const [activeTab, setActiveTab] = useState<'editor' | 'questions' | 'preview'>('editor');
     const [isSaving, setIsSaving] = useState(false);
-    const [isGenerating, setIsGenerating] = useState(false);
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [isPreviewMode, setIsPreviewMode] = useState(false);
+
+    // Export State
+    const [exportState, setExportState] = useState<{
+        step: ExportStep;
+        error: string | null;
+        isOpen: boolean;
+    }>({ step: 'idle', error: null, isOpen: false });
+
+    // Template State
+    const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
     const txtInputRef = useRef<HTMLInputElement>(null);
 
@@ -42,10 +66,29 @@ export default function QuizMaker() {
         const saved = localStorage.getItem('quiz_maker_state');
         if (saved) {
             try {
-                setState(JSON.parse(saved));
+                const parsed = JSON.parse(saved);
+
+                // MIGRATION: Ensure settings object has all new fields
+                // This handles migration from old PDFSettings to new QuizSettings
+                if (!parsed.settings || !parsed.settings.selectedPresetId) {
+                    const oldSettings = parsed.settings || {};
+                    parsed.settings = {
+                        ...INITIAL_STATE.settings,
+                        // Map old fields if they exist
+                        showAnswers: oldSettings.showAnswers ?? true,
+                        // Map old fontSize to preset if possible
+                        selectedPresetId: oldSettings.fontSize === 'small' ? 'compact' :
+                            oldSettings.fontSize === 'large' ? 'readable' : DEFAULT_PRESET_ID,
+                    };
+                }
+
+                setState(parsed);
             } catch (e) {
                 console.error('Failed to load state', e);
             }
+        } else {
+            // No saved state, show template picker
+            setShowTemplatePicker(true);
         }
     }, []);
 
@@ -59,6 +102,13 @@ export default function QuizMaker() {
             return () => clearTimeout(timer);
         }
     }, [state, mounted]);
+
+    // Trigger export when step is preparing
+    useEffect(() => {
+        if (exportState.step === 'preparing') {
+            handleExportPDF();
+        }
+    }, [exportState.step]);
 
     const updateState = (updates: Partial<QuizState>) => {
         setState((prev) => ({ ...prev, ...updates }));
@@ -90,14 +140,23 @@ export default function QuizMaker() {
             if (text) {
                 try {
                     const parsed = parseTxtToQuiz(text);
+                    const importedSections = parsed.sections || [];
+                    // Ensure the imported sections have an ID if potentially missing, though parser adds them.
+                    // Also useful to ensure uniqueness if importing multiple times.
+                    const newSections = importedSections.map(s => ({
+                        ...s,
+                        id: uuidv4(), // Regenerate ID to avoid collisions
+                        title: importedSections.length === 1 ? file.name.replace('.txt', '') : s.title
+                    }));
+
                     setState(prev => ({
                         ...prev,
-                        // Use title from filename if empty?
-                        title: prev.title || file.name.replace('.txt', ''),
+                        title: prev.title || parsed.title || file.name.replace('.txt', ''),
                         content: parsed.content || prev.content,
-                        questions: [...prev.questions, ...(parsed.questions || [])],
+                        sections: [...prev.sections, ...newSections],
                     }));
-                    alert(`Imported successfully! Added ${parsed.questions?.length} questions.`);
+                    const totalQuestions = newSections.reduce((acc, s) => acc + s.questions.length, 0);
+                    alert(`Imported successfully! Added ${totalQuestions} questions in ${newSections.length} new section(s).`);
                 } catch (err) {
                     console.error(err);
                     alert('Failed to parse TXT file.');
@@ -110,9 +169,40 @@ export default function QuizMaker() {
     };
 
     const handleExportPDF = async () => {
+        setExportState({ step: 'preparing', error: null, isOpen: true });
+
         try {
-            setIsGenerating(true);
-            const blob = await pdf(<PDFDocument state={state} />).toBlob();
+            // Step 1: Normalize content (Preparing)
+            await new Promise(r => setTimeout(r, 500)); // Min wait for UI feel
+            const normalizedState = normalizeQuizContent(state);
+
+            // Step 2: Layout (Paginate)
+            setExportState(prev => ({ ...prev, step: 'layout' }));
+            await new Promise(r => setTimeout(r, 100)); // Yield to UI
+
+            const normalizationPreset = getPreset(normalizedState.settings.selectedPresetId);
+            const paginatedPages = paginateQuestions(normalizedState.sections, normalizationPreset);
+
+            // Check if pagination worked
+            // Check if any pages generated (if we have sections/questions)
+            const hasQuestions = normalizedState.sections.some(s => s.questions.length > 0);
+            if (paginatedPages.length === 0 && hasQuestions) {
+                throw new Error('Pagination failed to generate any pages.');
+            }
+
+            // Step 3: Render (Generating PDF)
+            setExportState(prev => ({ ...prev, step: 'rendering' }));
+            await new Promise(r => setTimeout(r, 100)); // Yield to UI
+
+            const blob = await pdf(
+                <PDFDocument
+                    state={normalizedState}
+                    pages={paginatedPages}
+                />
+            ).toBlob();
+
+            // Step 4: Finalizing
+            setExportState(prev => ({ ...prev, step: 'finalizing' }));
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
@@ -120,12 +210,39 @@ export default function QuizMaker() {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+
+            // Done
+            setExportState(prev => ({ ...prev, step: 'done' }));
+
+            // Auto close after success
+            setTimeout(() => {
+                setExportState(prev => ({ ...prev, isOpen: false, step: 'idle' }));
+            }, 1500);
+
         } catch (err) {
             console.error('PDF generation failed', err);
-            alert('Failed to generate PDF. check console.');
-        } finally {
-            setIsGenerating(false);
+            setExportState(prev => ({
+                ...prev,
+                step: 'error',
+                error: err instanceof Error ? err.message : 'Unknown error during PDF generation'
+            }));
         }
+    };
+
+    const handleCancelExport = () => {
+        setExportState({ step: 'idle', error: null, isOpen: false });
+    };
+
+    const handleSelectTemplate = (template: QuizTemplate) => {
+        if (state.sections.length > 0) {
+            // Check if any section has questions
+            const hasQ = state.sections.some(s => s.questions.length > 0);
+            if (hasQ && !confirm('Using a template will replace your current quiz. Are you sure?')) {
+                return;
+            }
+        }
+        setState(template.defaultQuizData);
+        setShowTemplatePicker(false);
     };
 
     // UI Components helpers
@@ -177,6 +294,28 @@ export default function QuizMaker() {
                     <span className="text-xs text-gray-400 hidden sm:inline-block">
                         {isSaving ? 'Saving...' : 'Saved'}
                     </span>
+                    {/* Main Actions */}
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="hidden md:flex gap-2"
+                            onClick={() => setIsPreviewMode(true)}
+                        >
+                            <FileText className="h-4 w-4" />
+                            Preview
+                        </Button>
+
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="hidden md:flex gap-2"
+                            onClick={() => setSettingsOpen(true)}
+                        >
+                            <Settings className="h-4 w-4" />
+                            Settings
+                        </Button>
+                    </div>
                 </div>
                 <div className="flex items-center gap-2">
                     {/* Hidden Inputs */}
@@ -198,8 +337,11 @@ export default function QuizMaker() {
                     <Button variant="ghost" size="icon" onClick={handleExportJSON} title="Export JSON" className="dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800">
                         <Download className="h-5 w-5" />
                     </Button>
-                    <Button onClick={handleExportPDF} disabled={isGenerating} className="gap-2 dark:bg-blue-600 dark:hover:bg-blue-700 dark:text-white">
-                        {isGenerating ? <span className="animate-spin">⌛</span> : <Printer className="h-4 w-4" />}
+                    <Button variant="ghost" size="icon" onClick={() => setShowTemplatePicker(true)} title="Templates" className="dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800">
+                        <LayoutTemplate className="h-5 w-5" />
+                    </Button>
+                    <Button onClick={handleExportPDF} disabled={isSaving} className="gap-2 dark:bg-blue-600 dark:hover:bg-blue-700 dark:text-white">
+                        <Printer className="h-4 w-4" />
                         <span className="hidden sm:inline">Export PDF</span>
                     </Button>
                     <ThemeToggle />
@@ -232,11 +374,11 @@ export default function QuizMaker() {
                         activeTab === 'editor' ? 'hidden md:block' : 'block'
                     )}>
                         <QuestionBuilder
-                            questions={state.questions}
-                            onChange={(q) => updateState({ questions: q })}
+                            sections={state.sections}
+                            onChange={(s) => updateState({ sections: s })}
                             onClear={() => {
-                                if (confirm('Are you sure you want to delete ALL questions?')) {
-                                    updateState({ questions: [] });
+                                if (confirm('Are you sure you want to delete ALL sections and questions?')) {
+                                    updateState({ sections: [] });
                                 }
                             }}
                         />
@@ -254,8 +396,38 @@ export default function QuizMaker() {
                 </div>
             </main>
 
-            {/* Mobile Nav */}
             <MobileTabNav />
-        </div>
+
+            {/* Full Screen Preview Overlay */}
+            {
+                isPreviewMode && (
+                    <QuizPreview
+                        state={state}
+                        onExit={() => setIsPreviewMode(false)}
+                    />
+                )
+            }
+
+            <SettingsPanel
+                isOpen={settingsOpen}
+                onClose={() => setSettingsOpen(false)}
+                settings={state.settings}
+                onUpdate={(settings) => updateState({ settings })}
+            />
+
+            <ExportProgress
+                isOpen={exportState.isOpen}
+                currentStep={exportState.step}
+                error={exportState.error}
+                onCancel={() => setExportState(prev => ({ ...prev, isOpen: false, error: null }))}
+                onRetry={() => setExportState(prev => ({ ...prev, step: 'preparing', error: null }))}
+            />
+
+            <TemplatePicker
+                isOpen={showTemplatePicker}
+                onCancel={() => setShowTemplatePicker(false)}
+                onSelectTemplate={handleSelectTemplate}
+            />
+        </div >
     );
 }

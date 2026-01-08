@@ -9,7 +9,7 @@ const A4_WIDTH_PX = 794; // 210mm at 96dpi
 const A4_HEIGHT_PX = 1123; // 297mm at 96dpi
 
 export const LivePreview = ({ state }: LivePreviewProps) => {
-    const { title, content, questions, settings } = state;
+    const { title, content, settings } = state;
 
     return (
         <div className="bg-gray-100 p-4 lg:p-8 overflow-auto h-full flex flex-col items-center gap-8 shadow-inner">
@@ -38,34 +38,47 @@ export const LivePreview = ({ state }: LivePreviewProps) => {
                     dangerouslySetInnerHTML={{ __html: content }}
                 />
 
-                {/* Questions */}
-                {questions.length > 0 && (
-                    <div className="mt-8 space-y-6">
-                        <h2 className="text-2xl font-bold border-b pb-2 mb-4">Questions</h2>
-                        {questions.map((q) => (
-                            <div key={q.id} className="break-inside-avoid">
-                                <div className="font-semibold text-lg mb-2">
-                                    {q.number}. {q.text}
+                {/* Sections & Questions */}
+                <div className="mt-8 space-y-8">
+                    {state.sections.map((section) => (
+                        <div key={section.id} className="space-y-6">
+                            {/* Section Header */}
+                            {settings.showSectionTitles && (
+                                <div className="border-b pb-2 mb-4">
+                                    <h2 className="text-2xl font-bold">{section.title}</h2>
+                                    {section.description && (
+                                        <p className="text-gray-600 mt-1">{section.description}</p>
+                                    )}
                                 </div>
-                                <div className="pl-4 space-y-1">
-                                    {q.options.map((opt, idx) => (
-                                        <div key={idx} className="flex gap-2">
-                                            <span className="font-medium text-gray-700">{String.fromCharCode(65 + idx)})</span>
-                                            <span>{opt}</span>
-                                        </div>
-                                    ))}
+                            )}
+
+                            {/* questions */}
+                            {section.questions.map((q) => (
+                                <div key={q.id} className="break-inside-avoid">
+                                    <div className="font-semibold text-lg mb-2 flex gap-2">
+                                        {settings.showQuestionNumbers && <span>{q.number}.</span>}
+                                        <span>{q.text}</span>
+                                    </div>
+                                    <div className="pl-4 space-y-1">
+                                        {q.options.map((opt, idx) => (
+                                            <div key={idx} className="flex gap-2">
+                                                <span className="font-medium text-gray-700">{String.fromCharCode(65 + idx)})</span>
+                                                <span>{opt}</span>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
+                            ))}
+                        </div>
+                    ))}
+                </div>
 
                 {/* Answer Key */}
-                {settings.includeAnswerKey && settings.showAnswers && questions.length > 0 && (
+                {settings.includeAnswerKey && settings.showAnswers && state.sections.some(s => s.questions.length > 0) && (
                     <div className="mt-12 pt-8 border-t break-before-page">
                         <h3 className="text-xl font-bold mb-4">Answer Key</h3>
                         <div className="grid grid-cols-2 gap-2">
-                            {questions.map((q) => (
+                            {state.sections.flatMap(s => s.questions).map((q) => (
                                 <div key={q.id}>
                                     <span className="font-bold">{q.number}.</span> {String.fromCharCode(65 + q.correctAnswer)}
                                     {q.explanation && (

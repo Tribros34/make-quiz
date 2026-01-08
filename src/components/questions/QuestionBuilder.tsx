@@ -13,19 +13,19 @@ import {
     sortableKeyboardCoordinates,
     verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { Question } from '@/lib/types';
-import { SortableQuestionCard } from './SortableQuestionCard';
+import { Question, Section } from '@/lib/types';
+import { SectionCard } from './SectionCard';
 import { Button } from '@/components/ui/Button';
 import { Plus, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface QuestionBuilderProps {
-    questions: Question[];
-    onChange: (questions: Question[]) => void;
+    sections: Section[];
+    onChange: (sections: Section[]) => void;
     onClear: () => void;
 }
 
-export function QuestionBuilder({ questions, onChange, onClear }: QuestionBuilderProps) {
+export function QuestionBuilder({ sections, onChange, onClear }: QuestionBuilderProps) {
     const sensors = useSensors(
         useSensor(PointerSensor),
         useSensor(KeyboardSensor, {
@@ -37,67 +37,158 @@ export function QuestionBuilder({ questions, onChange, onClear }: QuestionBuilde
         const { active, over } = event;
 
         if (over && active.id !== over.id) {
-            const oldIndex = questions.findIndex((q) => q.id === active.id);
-            const newIndex = questions.findIndex((q) => q.id === over.id);
+            // Check if we are dragging a section or a question
+            const activeType = active.data.current?.type;
+            const overType = over.data.current?.type;
 
-            const reordered = arrayMove(questions, oldIndex, newIndex);
-            // Re-number questions based on new order? 
-            // User said "Question number: auto-increment starting from 1 (editable)".
-            // If we reorder, number should probably update to reflect position 1, 2, 3...
-            // Or should it keep its original number? "displayed responsively... numbered 1, 2, 3...".
-            // Usually reordering implies re-numbering.
-            // I will update numbers.
-            const renumbered = reordered.map((q, idx) => ({ ...q, number: idx + 1 }));
-            onChange(renumbered);
+            if (activeType === 'section' && overType === 'section') {
+                const oldIndex = sections.findIndex((s) => s.id === active.id);
+                const newIndex = sections.findIndex((s) => s.id === over.id);
+                onChange(arrayMove(sections, oldIndex, newIndex));
+            } else if (activeType === 'question') {
+                // Find source section and question
+                // For simplicity, we only strictly support reordering within the SAME section for now as per requirements-ish
+                // But DndKit might allow dragging across if we are not careful.
+                // To keep scope safe, let's assume we are reordering within the same section context.
+                // Actually, since we have multiple SortableContexts, we need to find which section handles this.
+                // If we restrict reordering to be handled by the SectionCard internal SortableContext,
+                // the event usually bubbles up here if we wrap everything in one DndContext.
+
+                // However, a simpler approach for nested lists in DndKit often involves ensuring unique IDs.
+                // Let's implement question reordering logic here if possible, OR delegate it?
+                // Actually, if we use one main DndContext, we need to handle all drops here.
+
+                // Let's try to find which section contains these questions.
+                const findSection = (id: string) => sections.find(s => s.questions.some(q => q.id === id));
+
+                const activeSection = findSection(active.id as string);
+                const overSection = findSection(over.id as string);
+
+                if (activeSection && overSection && activeSection.id === overSection.id) {
+                    const sectionIndex = sections.indexOf(activeSection);
+                    const oldQIndex = activeSection.questions.findIndex(q => q.id === active.id);
+                    const newQIndex = activeSection.questions.findIndex(q => q.id === over.id);
+
+                    const newQuestions = arrayMove(activeSection.questions, oldQIndex, newQIndex);
+                    // Renumber questions within section 
+                    // (Or globally? Requirement said "Question number: auto-increment". Usually per quiz, not per section)
+                    // Let's renumber globally later, or locally here. 
+                    // To keep it simple, let's just update the array for now and run a global renumbering pass.
+
+                    const updatedSection = { ...activeSection, questions: newQuestions };
+                    const newSections = [...sections];
+                    newSections[sectionIndex] = updatedSection;
+
+                    // Renumber all questions across all sections to be safe and consistent
+                    const finalSections = renumberAllQuestions(newSections);
+                    onChange(finalSections);
+                }
+            }
         }
     };
 
-    const addQuestion = () => {
+    const renumberAllQuestions = (secs: Section[]) => {
+        let count = 1;
+        return secs.map(sec => ({
+            ...sec,
+            questions: sec.questions.map(q => ({ ...q, number: count++ }))
+        }));
+    };
+
+    const addSection = () => {
+        const newSection: Section = {
+            id: uuidv4(),
+            title: `Section ${sections.length + 1}`,
+            questions: [],
+        };
+        onChange([...sections, newSection]);
+    };
+
+    const updateSection = (updated: Section) => {
+        const newSections = sections.map((s) => (s.id === updated.id ? updated : s));
+        onChange(newSections);
+    };
+
+    const deleteSection = (id: string) => {
+        if (sections.length <= 1 && sections[0].questions.length > 0) {
+            if (!confirm('This will delete the section and all its questions. Continue?')) return;
+        }
+        const filtered = sections.filter((s) => s.id !== id);
+        if (filtered.length === 0) {
+            // Always keep at least one section? Or allow empty.
+            // If empty, user sees "Add Section".
+        }
+        onChange(renumberAllQuestions(filtered));
+    };
+
+    // Question Handlers
+    const handleAddQuestion = (sectionId: string) => {
         const newQuestion: Question = {
             id: uuidv4(),
-            number: questions.length + 1,
+            type: 'multiple-choice',
+            number: 0, // Will be fixed by renumber
             text: '',
             options: ['', '', '', ''],
             correctAnswer: 0,
             explanation: '',
         };
-        onChange([...questions, newQuestion]);
+
+        const newSections = sections.map(s => {
+            if (s.id === sectionId) {
+                return { ...s, questions: [...s.questions, newQuestion] };
+            }
+            return s;
+        });
+        onChange(renumberAllQuestions(newSections));
     };
 
-    const updateQuestion = (updated: Question) => {
-        const newQuestions = questions.map((q) => (q.id === updated.id ? updated : q));
-        onChange(newQuestions);
+    const handleUpdateQuestion = (sectionId: string, updatedQ: Question) => {
+        const newSections = sections.map(s => {
+            if (s.id === sectionId) {
+                return {
+                    ...s,
+                    questions: s.questions.map(q => q.id === updatedQ.id ? updatedQ : q)
+                };
+            }
+            return s;
+        });
+        onChange(newSections);
     };
 
-    const deleteQuestion = (id: string) => {
-        const filtered = questions.filter((q) => q.id !== id);
-        // Renumber
-        const renumbered = filtered.map((q, idx) => ({ ...q, number: idx + 1 }));
-        onChange(renumbered);
+    const handleDeleteQuestion = (sectionId: string, questionId: string) => {
+        const newSections = sections.map(s => {
+            if (s.id === sectionId) {
+                return { ...s, questions: s.questions.filter(q => q.id !== questionId) };
+            }
+            return s;
+        });
+        onChange(renumberAllQuestions(newSections));
     };
 
-    const duplicateQuestion = (question: Question) => {
+    const handleDuplicateQuestion = (sectionId: string, question: Question) => {
         const newQuestion = {
             ...question,
             id: uuidv4(),
-            number: questions.length + 1, // Will be fixed by renumbering logic if inserted else where, but appending to end is safest simple default
         };
-        // Insert after the current one?
-        const index = questions.findIndex(q => q.id === question.id);
-        const newQuestions = [...questions];
-        newQuestions.splice(index + 1, 0, newQuestion);
 
-        // Renumber all
-        const renumbered = newQuestions.map((q, idx) => ({ ...q, number: idx + 1 }));
-        onChange(renumbered);
+        const newSections = sections.map(s => {
+            if (s.id === sectionId) {
+                const index = s.questions.findIndex(q => q.id === question.id);
+                const newQs = [...s.questions];
+                newQs.splice(index + 1, 0, newQuestion);
+                return { ...s, questions: newQs };
+            }
+            return s;
+        });
+        onChange(renumberAllQuestions(newSections));
     };
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold dark:text-white">Questions</h2>
                 <div className="flex gap-2">
-                    {questions.length > 0 && (
+                    {sections.length > 0 && (
                         <Button
                             onClick={onClear}
                             size="sm"
@@ -107,8 +198,8 @@ export function QuestionBuilder({ questions, onChange, onClear }: QuestionBuilde
                             <Trash2 className="mr-2 h-4 w-4" /> Clear All
                         </Button>
                     )}
-                    <Button onClick={addQuestion} size="sm" className="dark:bg-blue-600 dark:text-white dark:hover:bg-blue-700">
-                        <Plus className="mr-2 h-4 w-4" /> Add Question
+                    <Button onClick={addSection} size="sm" className="dark:bg-blue-600 dark:text-white dark:hover:bg-blue-700">
+                        <Plus className="mr-2 h-4 w-4" /> Add Section
                     </Button>
                 </div>
             </div>
@@ -119,27 +210,31 @@ export function QuestionBuilder({ questions, onChange, onClear }: QuestionBuilde
                 onDragEnd={handleDragEnd}
             >
                 <SortableContext
-                    items={questions.map(q => q.id)}
+                    items={sections.map(s => s.id)}
                     strategy={verticalListSortingStrategy}
                 >
-                    <div className="space-y-4">
-                        {questions.map((question) => (
-                            <SortableQuestionCard
-                                key={question.id}
-                                question={question}
-                                onUpdate={updateQuestion}
-                                onDelete={() => deleteQuestion(question.id)}
-                                onDuplicate={() => duplicateQuestion(question)}
+                    <div className="space-y-6">
+                        {sections.map((section) => (
+                            <SectionCard
+                                key={section.id}
+                                section={section}
+                                onUpdate={updateSection}
+                                onDelete={() => deleteSection(section.id)}
+                                onAddQuestion={handleAddQuestion}
+                                onUpdateQuestion={handleUpdateQuestion}
+                                onDeleteQuestion={handleDeleteQuestion}
+                                onDuplicateQuestion={handleDuplicateQuestion}
                             />
                         ))}
-                        {questions.length === 0 && (
-                            <div className="text-center p-8 border-2 border-dashed rounded-lg text-gray-500 bg-gray-50">
-                                No questions yet. Click "Add Question" to start.
-                            </div>
-                        )}
                     </div>
                 </SortableContext>
             </DndContext>
+
+            {sections.length === 0 && (
+                <div className="text-center p-8 border-2 border-dashed rounded-lg text-gray-500 bg-gray-50 dark:bg-zinc-900 dark:border-zinc-800">
+                    No sections yet. Click "Add Section" to start adding questions.
+                </div>
+            )}
         </div>
     );
 }
