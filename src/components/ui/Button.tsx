@@ -19,7 +19,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
                     {
                         'bg-blue-600 text-white hover:bg-blue-700': variant === 'default',
                         'border border-input bg-background hover:bg-accent hover:text-accent-foreground': variant === 'outline',
-                        'hover:bg-gray-100 hover:text-gray-900': variant === 'ghost',
+                        'hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-50': variant === 'ghost',
                         'bg-red-500 text-white hover:bg-red-600': variant === 'destructive',
                         'h-10 px-4 py-2': size === 'default',
                         'h-9 rounded-md px-3': size === 'sm',
