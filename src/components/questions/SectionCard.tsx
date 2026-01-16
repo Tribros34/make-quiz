@@ -63,13 +63,13 @@ export function SectionCard({
                         value={section.title}
                         onChange={(e) => onUpdate({ ...section, title: e.target.value })}
                         placeholder="Section Title (e.g., Part A)"
-                        className="font-bold text-lg bg-transparent border-transparent hover:border-gray-300 focus:border-blue-500 px-0 h-10"
+                        className="font-bold text-lg bg-transparent border-transparent hover:border-gray-300 focus:border-blue-500 px-0 h-10 dark:text-white"
                     />
                     <Input
                         value={section.description || ''}
                         onChange={(e) => onUpdate({ ...section, description: e.target.value })}
                         placeholder="Optional description (e.g., Multiple Choice)"
-                        className="text-sm text-gray-500 bg-transparent border-transparent hover:border-gray-300 focus:border-blue-500 px-0 h-10"
+                        className="text-sm text-gray-500 bg-transparent border-transparent hover:border-gray-300 focus:border-blue-500 px-0 h-10 dark:text-gray-400"
                     />
                 </div>
 
