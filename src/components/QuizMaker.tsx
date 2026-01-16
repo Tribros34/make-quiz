@@ -15,14 +15,13 @@ import { ExportProgress, ExportStep } from '@/components/pdf/ExportProgress';
 import { normalizeQuizContent, paginateQuestions } from '@/components/pdf/utils/pdfHelpers';
 import { TemplatePicker } from '@/components/templates/TemplatePicker';
 import { QuizTemplate } from '@/templates/quizTemplates';
-import { Save, Download, FilePlus, Settings, Printer, FileText, Smartphone, Upload, Plus, LayoutTemplate } from 'lucide-react';
+import { Save, Download, FilePlus, Settings, Printer, FileText, Smartphone, Upload, Plus, LayoutTemplate, Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { v4 as uuidv4 } from 'uuid';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
-import { DEFAULT_PRESET_ID, getPreset } from '@/lib/pdfPresets'; // Added getPreset
+import { DEFAULT_PRESET_ID, getPreset } from '@/lib/pdfPresets';
 import { QuizPreview } from '@/components/preview/QuizPreview';
-// import { generatePDF } from '@/lib/pdfGenerator'; // To be implemented
 
 const INITIAL_STATE: QuizState = {
     title: '',
@@ -49,6 +48,9 @@ export default function QuizMaker() {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [isPreviewMode, setIsPreviewMode] = useState(false);
 
+    // Mobile Menu State
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
     // Export State
     const [exportState, setExportState] = useState<{
         step: ExportStep;
@@ -69,14 +71,11 @@ export default function QuizMaker() {
                 const parsed = JSON.parse(saved);
 
                 // MIGRATION: Ensure settings object has all new fields
-                // This handles migration from old PDFSettings to new QuizSettings
                 if (!parsed.settings || !parsed.settings.selectedPresetId) {
                     const oldSettings = parsed.settings || {};
                     parsed.settings = {
                         ...INITIAL_STATE.settings,
-                        // Map old fields if they exist
                         showAnswers: oldSettings.showAnswers ?? true,
-                        // Map old fontSize to preset if possible
                         selectedPresetId: oldSettings.fontSize === 'small' ? 'compact' :
                             oldSettings.fontSize === 'large' ? 'readable' : DEFAULT_PRESET_ID,
                     };
@@ -146,11 +145,9 @@ export default function QuizMaker() {
                 try {
                     const parsed = parseTxtToQuiz(text);
                     const importedSections = parsed.sections || [];
-                    // Ensure the imported sections have an ID if potentially missing, though parser adds them.
-                    // Also useful to ensure uniqueness if importing multiple times.
                     const newSections = importedSections.map(s => ({
                         ...s,
-                        id: uuidv4(), // Regenerate ID to avoid collisions
+                        id: uuidv4(),
                         title: importedSections.length === 1 ? file.name.replace('.txt', '') : s.title
                     }));
 
@@ -177,27 +174,22 @@ export default function QuizMaker() {
         setExportState({ step: 'preparing', error: null, isOpen: true });
 
         try {
-            // Step 1: Normalize content (Preparing)
-            await new Promise(r => setTimeout(r, 500)); // Min wait for UI feel
+            await new Promise(r => setTimeout(r, 500));
             const normalizedState = normalizeQuizContent(state);
 
-            // Step 2: Layout (Paginate)
             setExportState(prev => ({ ...prev, step: 'layout' }));
-            await new Promise(r => setTimeout(r, 100)); // Yield to UI
+            await new Promise(r => setTimeout(r, 100));
 
             const normalizationPreset = getPreset(normalizedState.settings.selectedPresetId);
             const paginatedPages = paginateQuestions(normalizedState.sections, normalizationPreset);
 
-            // Check if pagination worked
-            // Check if any pages generated (if we have sections/questions)
             const hasQuestions = normalizedState.sections.some(s => s.questions.length > 0);
             if (paginatedPages.length === 0 && hasQuestions) {
                 throw new Error('Pagination failed to generate any pages.');
             }
 
-            // Step 3: Render (Generating PDF)
             setExportState(prev => ({ ...prev, step: 'rendering' }));
-            await new Promise(r => setTimeout(r, 100)); // Yield to UI
+            await new Promise(r => setTimeout(r, 100));
 
             const blob = await pdf(
                 <PDFDocument
@@ -206,7 +198,6 @@ export default function QuizMaker() {
                 />
             ).toBlob();
 
-            // Step 4: Finalizing
             setExportState(prev => ({ ...prev, step: 'finalizing' }));
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
@@ -216,10 +207,8 @@ export default function QuizMaker() {
             link.click();
             document.body.removeChild(link);
 
-            // Done
             setExportState(prev => ({ ...prev, step: 'done' }));
 
-            // Auto close after success
             setTimeout(() => {
                 setExportState(prev => ({ ...prev, isOpen: false, step: 'idle' }));
             }, 1500);
@@ -234,13 +223,8 @@ export default function QuizMaker() {
         }
     };
 
-    const handleCancelExport = () => {
-        setExportState({ step: 'idle', error: null, isOpen: false });
-    };
-
     const handleSelectTemplate = (template: QuizTemplate) => {
         if (state.sections.length > 0) {
-            // Check if any section has questions
             const hasQ = state.sections.some(s => s.questions.length > 0);
             if (hasQ && !confirm('Using a template will replace your current quiz. Are you sure?')) {
                 return;
@@ -250,7 +234,6 @@ export default function QuizMaker() {
         setShowTemplatePicker(false);
     };
 
-    // UI Components helpers
     const MobileTabNav = () => (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around p-2 md:hidden z-50">
             <Button
@@ -288,18 +271,19 @@ export default function QuizMaker() {
     return (
         <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-zinc-950">
             {/* Top Bar */}
-            <header className="h-16 bg-white dark:bg-zinc-900 border-b dark:border-zinc-800 px-4 flex items-center justify-between shrink-0 z-10">
+            <header className="h-16 bg-white dark:bg-zinc-900 border-b dark:border-zinc-800 px-4 flex items-center justify-between shrink-0 z-10 relative">
                 <div className="flex items-center gap-4 flex-1">
                     <Input
                         value={state.title}
                         onChange={(e) => updateState({ title: e.target.value })}
                         placeholder="Document Title"
-                        className="text-lg font-bold border-transparent hover:border-gray-300 focus:border-blue-500 max-w-md h-10 dark:bg-zinc-800 dark:text-white dark:hover:border-zinc-700"
+                        className="text-lg font-bold border-transparent hover:border-gray-300 focus:border-blue-500 max-w-[200px] md:max-w-md h-10 dark:bg-zinc-800 dark:text-white dark:hover:border-zinc-700"
                     />
                     <span className="text-xs text-gray-400 hidden sm:inline-block">
                         {isSaving ? 'Saving...' : 'Saved'}
                     </span>
-                    {/* Main Actions */}
+
+                    {/* Desktop Main Actions */}
                     <div className="flex items-center gap-2">
                         <Button
                             variant="outline"
@@ -322,6 +306,7 @@ export default function QuizMaker() {
                         </Button>
                     </div>
                 </div>
+
                 <div className="flex items-center gap-2">
                     {/* Hidden Inputs */}
                     <input
@@ -332,25 +317,64 @@ export default function QuizMaker() {
                         onChange={handleImportTXT}
                     />
 
-                    <Button variant="ghost" size="icon" onClick={handleClear} title="New Document" className="dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800">
-                        <FilePlus className="h-5 w-5" />
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => txtInputRef.current?.click()} title="Import TXT" className="gap-2 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:text-white">
-                        <Upload className="h-4 w-4" />
-                        <span className="hidden sm:inline">Import TXT</span>
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={handleExportJSON} title="Export JSON" className="dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800">
-                        <Download className="h-5 w-5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setShowTemplatePicker(true)} title="Templates" className="dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800">
-                        <LayoutTemplate className="h-5 w-5" />
-                    </Button>
-                    <Button onClick={handleExportPDF} disabled={isSaving} className="gap-2 dark:bg-blue-600 dark:hover:bg-blue-700 dark:text-white">
+                    {/* Desktop Actions */}
+                    <div className="hidden md:flex items-center gap-2">
+                        <Button variant="ghost" size="icon" onClick={handleClear} title="New Document" className="dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800">
+                            <FilePlus className="h-5 w-5" />
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => txtInputRef.current?.click()} title="Import TXT" className="gap-2 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:text-white">
+                            <Upload className="h-4 w-4" />
+                            <span className="hidden sm:inline">Import TXT</span>
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={handleExportJSON} title="Export JSON" className="dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800">
+                            <Download className="h-5 w-5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => setShowTemplatePicker(true)} title="Templates" className="dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800">
+                            <LayoutTemplate className="h-5 w-5" />
+                        </Button>
+                    </div>
+
+                    <Button onClick={handleExportPDF} disabled={isSaving} className="gap-2 dark:bg-blue-600 dark:hover:bg-blue-700 dark:text-white h-9 px-3 text-xs md:text-sm md:h-10 md:px-4">
                         <Printer className="h-4 w-4" />
                         <span className="hidden sm:inline">Export PDF</span>
+                        <span className="inline sm:hidden">Export</span>
                     </Button>
+
                     <ThemeToggle />
+
+                    {/* Mobile Menu Toggle */}
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="md:hidden"
+                        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                    >
+                        {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                    </Button>
                 </div>
+
+                {/* Mobile Menu Dropdown */}
+                {mobileMenuOpen && (
+                    <div className="absolute top-16 right-0 left-0 bg-white dark:bg-zinc-900 border-b dark:border-zinc-800 shadow-xl p-4 flex flex-col gap-2 md:hidden z-50 animate-in slide-in-from-top-2">
+                        <div className="grid grid-cols-2 gap-2">
+                            <Button variant="outline" onClick={() => { setSettingsOpen(true); setMobileMenuOpen(false); }} className="justify-start">
+                                <Settings className="h-4 w-4 mr-2" /> Settings
+                            </Button>
+                            <Button variant="outline" onClick={() => { setShowTemplatePicker(true); setMobileMenuOpen(false); }} className="justify-start">
+                                <LayoutTemplate className="h-4 w-4 mr-2" /> Templates
+                            </Button>
+                            <Button variant="outline" onClick={() => { txtInputRef.current?.click(); setMobileMenuOpen(false); }} className="justify-start">
+                                <Upload className="h-4 w-4 mr-2" /> Import TXT
+                            </Button>
+                            <Button variant="outline" onClick={() => { handleExportJSON(); setMobileMenuOpen(false); }} className="justify-start">
+                                <Download className="h-4 w-4 mr-2" /> Export JSON
+                            </Button>
+                            <Button variant="ghost" onClick={() => { handleClear(); setMobileMenuOpen(false); }} className="justify-start text-red-500 hover:text-red-600">
+                                <FilePlus className="h-4 w-4 mr-2" /> New / Clear
+                            </Button>
+                        </div>
+                    </div>
+                )}
             </header>
 
             {/* Main Content */}

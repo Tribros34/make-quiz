@@ -52,9 +52,10 @@ export function SectionCard({
                 <div
                     {...attributes}
                     {...listeners}
-                    className="mt-2 cursor-move text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                    className="mt-2 cursor-move text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 touch-none"
+                    style={{ touchAction: 'none' }}
                 >
-                    <GripVertical className="h-5 w-5" />
+                    <GripVertical className="h-6 w-6" />
                 </div>
 
                 <div className="flex-1 space-y-2">
@@ -62,13 +63,13 @@ export function SectionCard({
                         value={section.title}
                         onChange={(e) => onUpdate({ ...section, title: e.target.value })}
                         placeholder="Section Title (e.g., Part A)"
-                        className="font-bold text-lg bg-transparent border-transparent hover:border-gray-300 focus:border-blue-500 px-0"
+                        className="font-bold text-lg bg-transparent border-transparent hover:border-gray-300 focus:border-blue-500 px-0 h-10"
                     />
                     <Input
                         value={section.description || ''}
                         onChange={(e) => onUpdate({ ...section, description: e.target.value })}
                         placeholder="Optional description (e.g., Multiple Choice)"
-                        className="text-sm text-gray-500 bg-transparent border-transparent hover:border-gray-300 focus:border-blue-500 px-0 h-8"
+                        className="text-sm text-gray-500 bg-transparent border-transparent hover:border-gray-300 focus:border-blue-500 px-0 h-10"
                     />
                 </div>
 
@@ -76,10 +77,10 @@ export function SectionCard({
                     variant="ghost"
                     size="icon"
                     onClick={onDelete}
-                    className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 h-10 w-10"
                     title="Delete Section"
                 >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-5 w-5" />
                 </Button>
             </div>
 
@@ -102,9 +103,9 @@ export function SectionCard({
                     <Button
                         onClick={() => onAddQuestion(section.id)}
                         variant="ghost"
-                        className="w-full border-2 border-dashed border-gray-200 dark:border-zinc-800 text-gray-400 hover:border-blue-500 hover:text-blue-500"
+                        className="w-full border-2 border-dashed border-gray-200 dark:border-zinc-800 text-gray-400 hover:border-blue-500 hover:text-blue-500 h-12"
                     >
-                        <Plus className="h-4 w-4 mr-2" /> Add Question to {section.title}
+                        <Plus className="h-5 w-5 mr-2" /> Add Question to {section.title}
                     </Button>
                 </div>
             </SortableContext>
