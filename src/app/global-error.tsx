@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { RotateCcw, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import './globals.css';
 
 export default function GlobalError({
     error,
